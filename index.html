@@ -111,18 +111,6 @@
       <div class="card"><div class="label">Max Contracts</div><div class="value">5 / 50</div><div class="tiny">5 mini or 50 micro contracts</div></div>
     </section>
 
-    <section class="card" style="margin-top:16px;">
-      <h2 style="margin-top:0;">Firebase Cloud Sync</h2>
-      <p class="tiny" style="font-size:14px;">Use Google Sign-In to save your dashboard to Firestore and load it from another device.</p>
-      <div class="footerBtns">
-        <button id="signInBtn" type="button">Sign in with Google</button>
-        <button id="signOutBtn" type="button" class="secondary" style="display:none;">Sign out</button>
-        <button id="saveCloudBtn" type="button" class="secondary">Save to Cloud</button>
-        <button id="loadCloudBtn" type="button" class="secondary">Load from Cloud</button>
-      </div>
-      <div class="tiny" id="cloudStatus" style="font-size:14px; margin-top:12px;">Cloud status: not signed in.</div>
-    </section>
-
     <section class="grid main">
       <div class="card">
         <h2 style="margin-top:0;">Trading Journal</h2>
@@ -166,76 +154,24 @@
     </section>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
-    import {
-      getAuth,
-      GoogleAuthProvider,
-      signInWithPopup,
-      signOut,
-      onAuthStateChanged
-    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-    import {
-      getFirestore,
-      doc,
-      getDoc,
-      setDoc,
-      serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyCOdXPeeMG5uKsw_cWdLYPTFIF8hnq1vgA",
-      authDomain: "mff-dashboad.firebaseapp.com",
-      projectId: "mff-dashboad",
-      storageBucket: "mff-dashboad.firebasestorage.app",
-      messagingSenderId: "296262256888",
-      appId: "1:296262256888:web:f5ee704fa14b91cd3dd30d",
-      measurementId: "G-YDD476FCDE"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    isSupported().then((supported) => {
-      if (supported) getAnalytics(app);
-    }).catch(() => {});
-
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const provider = new GoogleAuthProvider();
-
+  <script>
     const STORAGE_KEY = 'mffRapid50kDashboardV2';
     const LEGACY_STORAGE_KEY = 'mffRapid50kDashboardV1';
-    const CLOUD_DOC_ID = 'rapid50k';
-    let currentUser = null;
-
-    const fmt = n => new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0
-    }).format(Number.isFinite(n) ? n : 0);
-
+    const fmt = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0);
     const pct = n => `${(Number.isFinite(n) ? n : 0).toFixed(1)}%`;
-
     const parseMoney = value => {
       const n = Number(value);
       return Number.isFinite(n) ? n : 0;
     };
-
     const todayISO = () => {
       const d = new Date();
       const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
       return local.toISOString().slice(0, 10);
     };
-
     const parseISODate = value => value ? new Date(`${value}T00:00:00`) : null;
 
     let state = {
-      purchaseDate: '2026-05-06',
-      targetDate: '2026-05-13',
-      profitTarget: 3000,
-      maxLoss: 2000,
-      consistencyLimit: 50,
-      minDays: 2,
+      purchaseDate: '2026-05-06', targetDate: '2026-05-13', profitTarget: 3000, maxLoss: 2000, consistencyLimit: 50, minDays: 2,
       rows: [
         { date: '2026-05-06', pnl: '', note: 'Account purchased / setup day.' },
         { date: '2026-05-07', pnl: '', note: '' },
@@ -244,53 +180,23 @@
       ]
     };
 
-    function setCloudStatus(message, kind = '') {
-      const el = document.getElementById('cloudStatus');
-      if (!el) return;
-      el.textContent = message;
-      el.className = `tiny ${kind}`.trim();
-      el.style.fontSize = '14px';
-      el.style.marginTop = '12px';
-    }
-
-    function dashboardDocRef() {
-      if (!currentUser) throw new Error('Please sign in first.');
-      return doc(db, 'users', currentUser.uid, 'dashboards', CLOUD_DOC_ID);
-    }
-
-    function cleanState(input) {
-      const next = { ...state, ...(input || {}) };
-      next.rows = Array.isArray(next.rows) ? next.rows : [];
-      next.profitTarget = Number(next.profitTarget) || 3000;
-      next.maxLoss = Number(next.maxLoss) || 2000;
-      next.consistencyLimit = Number(next.consistencyLimit) || 50;
-      next.minDays = Number(next.minDays) || 2;
-      next.purchaseDate = next.purchaseDate || '2026-05-06';
-      next.targetDate = next.targetDate || '2026-05-13';
-      return next;
-    }
-
     function loadData() {
       try {
         const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-        if (saved) state = cleanState(JSON.parse(saved));
+        if (saved) state = { ...state, ...JSON.parse(saved) };
       } catch (error) {
         console.warn('Saved dashboard data was invalid, using defaults.', error);
       }
-
+      state.rows = Array.isArray(state.rows) ? state.rows : [];
       ['purchaseDate','targetDate','profitTarget','maxLoss','consistencyLimit','minDays'].forEach(id => {
         document.getElementById(id).value = state[id];
       });
-
       renderRows();
       calculate();
     }
 
     function readSettings() {
-      ['purchaseDate','targetDate'].forEach(id => {
-        state[id] = document.getElementById(id).value;
-      });
-
+      ['purchaseDate','targetDate'].forEach(id => state[id] = document.getElementById(id).value);
       ['profitTarget','maxLoss','consistencyLimit','minDays'].forEach(id => {
         const n = Number(document.getElementById(id).value);
         state[id] = Number.isFinite(n) && n > 0 ? n : 0;
@@ -339,7 +245,6 @@
         const actionCell = document.createElement('td');
         const deleteButton = document.createElement('button');
         deleteButton.className = 'secondary';
-        deleteButton.type = 'button';
         deleteButton.textContent = 'Delete';
         deleteButton.addEventListener('click', () => deleteRow(index));
         actionCell.appendChild(deleteButton);
@@ -360,6 +265,8 @@
       const tradingDays = pnls.filter(value => value !== 0).length;
       const bestDay = positivePnls.length ? Math.max(...positivePnls) : 0;
 
+      // Important edge case: losses increase the required amount to clear.
+      // Example: target 3000 and total -500 => remaining 3500 and remaining percentage 116.7%.
       const remaining = Math.max(target - total, 0);
       const remainingPercent = (remaining / target) * 100;
       const progressPercentRaw = (total / target) * 100;
@@ -418,48 +325,6 @@
       alert('Dashboard saved in this browser.');
     }
 
-    async function saveToCloud() {
-      try {
-        readSettings();
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        await setDoc(dashboardDocRef(), {
-          ...state,
-          updatedAt: serverTimestamp(),
-          ownerEmail: currentUser.email || null
-        }, { merge: true });
-        setCloudStatus(`Cloud status: saved for ${currentUser.email}.`, 'good');
-      } catch (error) {
-        console.error(error);
-        setCloudStatus(`Cloud save failed: ${error.message}`, 'bad');
-      }
-    }
-
-    async function loadFromCloud() {
-      try {
-        const snap = await getDoc(dashboardDocRef());
-        if (!snap.exists()) {
-          setCloudStatus('Cloud status: no saved dashboard found yet. Click Save to Cloud first.', 'warn');
-          return;
-        }
-
-        const cloudData = snap.data();
-        delete cloudData.updatedAt;
-        delete cloudData.ownerEmail;
-        state = cleanState(cloudData);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-
-        ['purchaseDate','targetDate','profitTarget','maxLoss','consistencyLimit','minDays'].forEach(id => {
-          document.getElementById(id).value = state[id];
-        });
-        renderRows();
-        calculate();
-        setCloudStatus(`Cloud status: loaded latest dashboard for ${currentUser.email}.`, 'good');
-      } catch (error) {
-        console.error(error);
-        setCloudStatus(`Cloud load failed: ${error.message}`, 'bad');
-      }
-    }
-
     function addRow() {
       state.rows.push({ date: todayISO(), pnl: '', note: '' });
       renderRows();
@@ -473,7 +338,7 @@
     }
 
     function resetData() {
-      if (confirm('Reset local dashboard data on this browser? Cloud data will not be deleted.')) {
+      if (confirm('Reset all saved dashboard data?')) {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(LEGACY_STORAGE_KEY);
         location.reload();
@@ -483,9 +348,7 @@
     function exportCSV() {
       readSettings();
       const lines = [['Date','P&L','Note'], ...state.rows.map(row => [row.date, row.pnl, row.note || ''])];
-      const csv = lines
-        .map(row => row.map(value => `"${String(value ?? '').replaceAll('"','""')}"`).join(','))
-        .join('\n');
+      const csv = lines.map(row => row.map(value => `"${String(value ?? '').replaceAll('"','""')}"`).join(',')).join('\n');
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -495,46 +358,13 @@
       URL.revokeObjectURL(url);
     }
 
-    window.addRow = addRow;
-    window.deleteRow = deleteRow;
-    window.saveData = saveData;
-    window.resetData = resetData;
-    window.exportCSV = exportCSV;
-
     window.addEventListener('DOMContentLoaded', () => {
       ['purchaseDate','targetDate','profitTarget','maxLoss','consistencyLimit','minDays'].forEach(id => {
         document.getElementById(id).addEventListener('input', calculate);
       });
-
-      document.getElementById('signInBtn').addEventListener('click', async () => {
-        try {
-          await signInWithPopup(auth, provider);
-        } catch (error) {
-          console.error(error);
-          setCloudStatus(`Sign-in failed: ${error.message}`, 'bad');
-        }
-      });
-
-      document.getElementById('signOutBtn').addEventListener('click', async () => {
-        await signOut(auth);
-      });
-
-      document.getElementById('saveCloudBtn').addEventListener('click', saveToCloud);
-      document.getElementById('loadCloudBtn').addEventListener('click', loadFromCloud);
-
-      onAuthStateChanged(auth, user => {
-        currentUser = user;
-        const signedIn = Boolean(user);
-        document.getElementById('signInBtn').style.display = signedIn ? 'none' : 'inline-flex';
-        document.getElementById('signOutBtn').style.display = signedIn ? 'inline-flex' : 'none';
-        setCloudStatus(
-          signedIn ? `Cloud status: signed in as ${user.email}.` : 'Cloud status: not signed in.',
-          signedIn ? 'good' : ''
-        );
-      });
-
       loadData();
     });
   </script>
+
 </body>
 </html>
